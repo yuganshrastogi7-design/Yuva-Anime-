@@ -1,0 +1,8 @@
+{
+  "name": "Yuva",
+  "description": "Yuva - The premier cinematic anime streaming destination with real-time simulcasts, authentic fan recommendations, and Netflix-grade playback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
