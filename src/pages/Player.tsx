@@ -266,7 +266,7 @@ export default function Player() {
     }
   };
 
-  // Fetch ReAnime Streams
+  // Fetch ReAnime Streams (with automatic client-side fallback for static/Vercel environments)
   useEffect(() => {
     if (!anime) return;
     let isMounted = true;
@@ -284,10 +284,89 @@ export default function Player() {
           const data = await res.json();
           if (isMounted && data.success && data.servers && data.servers.length > 0) {
             setResolvedReanimeData(data);
+            return;
           }
         }
       } catch (err) {
-        console.error("Failed to load stream servers:", err);
+        console.warn("Backend resolver unavailable, running client stream fallback:", err);
+      }
+
+      // CLIENT-SIDE FALLBACK RESOLVER:
+      // If deployed on Vercel/static host without backend, resolve streams directly
+      try {
+        let anilistId = 0;
+        if (id && /^\d+$/.test(id)) {
+          const q = `query ($idMal: Int) { Media(idMal: $idMal, type: ANIME) { id title { english romaji } } }`;
+          const alResp = await fetch("https://graphql.anilist.co", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ query: q, variables: { idMal: parseInt(id, 10) } })
+          });
+          if (alResp.ok) {
+            const alData = await alResp.json();
+            if (alData.data?.Media?.id) {
+              anilistId = alData.data.Media.id;
+            }
+          }
+        }
+
+        const targetId = anilistId || id;
+        const fallbackData = {
+          success: true,
+          anime: { title: anime.title, anilistId: targetId },
+          servers: [
+            {
+              id: 'server_1_sub',
+              name: 'Server 1 Sub',
+              tag: 'FlixCloud HD-1',
+              type: 'sub' as const,
+              quality: '1080p Full HD',
+              badge: 'Server 1 Sub',
+              url: `https://vidstuck.xyz/embed/anime/${targetId}/${ep}?dub=false`
+            },
+            {
+              id: 'server_1_dub',
+              name: 'Server 1 Dub',
+              tag: 'FlixCloud HD-1 Dub',
+              type: 'dub' as const,
+              quality: '1080p Full HD',
+              badge: 'Server 1 Dub',
+              url: `https://vidstuck.xyz/embed/anime/${targetId}/${ep}?dub=true`
+            },
+            {
+              id: 'server_2_sub',
+              name: 'Server 2 Sub',
+              tag: 'FlixCloud HD-2',
+              type: 'sub' as const,
+              quality: '1080p HD',
+              badge: 'Server 2 Sub',
+              url: `https://vidstuck.xyz/embed/anime/${targetId}/${ep}?dub=false`
+            },
+            {
+              id: 'server_2_dub',
+              name: 'Server 2 Dub',
+              tag: 'FlixCloud HD-2 Dub',
+              type: 'dub' as const,
+              quality: '1080p HD',
+              badge: 'Server 2 Dub',
+              url: `https://vidstuck.xyz/embed/anime/${targetId}/${ep}?dub=true`
+            },
+            {
+              id: 'vidstuck',
+              name: 'Vidstuck Server',
+              tag: 'Vidstuck Cloud',
+              type: 'universal' as const,
+              quality: '1080p Multi-Audio',
+              badge: 'Vidstuck',
+              url: `https://vidstuck.xyz/embed/anime/${targetId}/${ep}`
+            }
+          ]
+        };
+        if (isMounted) {
+          setResolvedReanimeData(fallbackData);
+        }
+      } catch (fallbackErr) {
+        console.error("Client stream fallback error:", fallbackErr);
       } finally {
         if (isMounted) setIsResolvingReanime(false);
       }
@@ -320,56 +399,47 @@ export default function Player() {
         {
           id: 'server_1_sub',
           name: 'Server 1 Sub',
-          tag: 'ReAnime HD-1',
+          tag: 'FlixCloud HD-1',
           type: 'sub',
           quality: '1080p Full HD',
           badge: 'Server 1 Sub',
-          getUrl: (aid, episodeNum) => `https://reanime.to/embed/${aid}/${episodeNum}?sub=1`
+          getUrl: (aid, episodeNum) => `https://vidstuck.xyz/embed/anime/${aid}/${episodeNum}?dub=false`
         },
         {
           id: 'server_1_dub',
           name: 'Server 1 Dub',
-          tag: 'ReAnime HD-1 Dub',
+          tag: 'FlixCloud HD-1 Dub',
           type: 'dub',
           quality: '1080p Full HD',
           badge: 'Server 1 Dub',
-          getUrl: (aid, episodeNum) => `https://reanime.to/embed/${aid}/${episodeNum}?dub=1`
+          getUrl: (aid, episodeNum) => `https://vidstuck.xyz/embed/anime/${aid}/${episodeNum}?dub=true`
         },
         {
           id: 'server_2_sub',
           name: 'Server 2 Sub',
-          tag: 'ReAnime HD-2',
+          tag: 'FlixCloud HD-2',
           type: 'sub',
           quality: '1080p HD',
           badge: 'Server 2 Sub',
-          getUrl: (aid, episodeNum) => `https://reanime.to/watch/${aid}?ep=${episodeNum}`
+          getUrl: (aid, episodeNum) => `https://vidstuck.xyz/embed/anime/${aid}/${episodeNum}?dub=false`
         },
         {
           id: 'server_2_dub',
           name: 'Server 2 Dub',
-          tag: 'ReAnime HD-2 Dub',
+          tag: 'FlixCloud HD-2 Dub',
           type: 'dub',
           quality: '1080p HD',
           badge: 'Server 2 Dub',
-          getUrl: (aid, episodeNum) => `https://reanime.to/watch/${aid}?ep=${episodeNum}&dub=1`
-        },
-        {
-          id: 'vidstuck_sub',
-          name: 'Vidstuck Sub',
-          tag: 'Vidstuck Cloud',
-          type: 'sub',
-          quality: '1080p Multi-Audio',
-          badge: 'Vidstuck Sub',
-          getUrl: (aid, episodeNum) => `https://vidstuck.xyz/embed/anime/${aid}/${episodeNum}?dub=false`
-        },
-        {
-          id: 'vidstuck_dub',
-          name: 'Vidstuck Dub',
-          tag: 'Vidstuck English Dub',
-          type: 'dub',
-          quality: '1080p Multi-Audio',
-          badge: 'Vidstuck Dub',
           getUrl: (aid, episodeNum) => `https://vidstuck.xyz/embed/anime/${aid}/${episodeNum}?dub=true`
+        },
+        {
+          id: 'vidstuck',
+          name: 'Vidstuck Server',
+          tag: 'Vidstuck Cloud',
+          type: 'universal',
+          quality: '1080p Multi-Audio',
+          badge: 'Vidstuck',
+          getUrl: (aid, episodeNum) => `https://vidstuck.xyz/embed/anime/${aid}/${episodeNum}`
         }
       );
     }

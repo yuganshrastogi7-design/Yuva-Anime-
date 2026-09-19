@@ -1,27 +1,35 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+export const app = express();
 
-  app.use(express.json());
+app.use(express.json());
 
-  // API Routes
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", service: "Yuva API" });
-  });
+// Enable CORS for all environments (Vercel previews, custom domains, local)
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
 
-  // In-memory cache for ReAnime anime lookups
-  const reanimeCache = new Map<string, { slug: string; anilistId: number; title: string; tmdbId?: number }>();
+// API Routes
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", service: "Yuva API" });
+});
 
-  // ReAnime Resolver Endpoint
-  app.get("/api/reanime/resolve", async (req, res) => {
+// In-memory cache for ReAnime anime lookups
+const reanimeCache = new Map<string, { slug: string; anilistId: number; title: string; tmdbId?: number }>();
+
+// ReAnime Resolver Endpoint
+app.get("/api/reanime/resolve", async (req, res) => {
     try {
       const rawTitle = (req.query.title as string) || "";
       const englishTitle = (req.query.englishTitle as string) || "";
@@ -735,25 +743,32 @@ async function startServer() {
     return res.json({ success: true, data: fallbackAnime });
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    // Serve static files in production
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+  // Boot standalone HTTP server and Vite middleware only when not running in Vercel serverless
+  if (!process.env.VERCEL) {
+    async function startStandalone() {
+      const PORT = 3000;
+      if (process.env.NODE_ENV !== "production") {
+        const { createServer: createViteServer } = await import("vite");
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+      } else {
+        // Serve static files in production
+        const distPath = path.join(process.cwd(), "dist");
+        app.use(express.static(distPath));
+        app.get("*", (req, res) => {
+          res.sendFile(path.join(distPath, "index.html"));
+        });
+      }
+
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Yuva Server running on http://localhost:${PORT}`);
+      });
+    }
+
+    startStandalone();
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Yuva Server running on http://localhost:${PORT}`);
-  });
-}
-
-startServer();
+export default app;
